@@ -6,6 +6,7 @@ var argv = require('yargs')
     .describe('response', 'The response to send on new messages')
     .describe('email', 'The email address to login with')
     .describe('password', 'The password to authenticate with')
+    .describe('num_threads', 'How many threads do you expect will to have unread messages')
     .demand('email')
     .demand('response')
     .argv;
@@ -13,6 +14,9 @@ if (!argv.password) {
   argv.password = require('readline-sync').question('Password? ', {
     hideEchoBack: true
   });
+}
+if(!argv.num_threads) {
+  argv.num_threads = 100;
 }
 
 login(argv, function callback (err, api) {
@@ -25,19 +29,14 @@ login(argv, function callback (err, api) {
       logLevel: "warn"
   });
 
-  var threads = {};
-  api.listen(function callback(err, message) {
-    if (err) {
-      console.log(err);
-    } else if (message.type == 'message') {
-      var thread = threads[message.threadID] || {};
-      if (!(message.senderID in thread)) {
-      	console.log('Received message from new sender: ', message);
-	api.sendMessage(argv.response, message.threadID);
-	thread[message.senderID] = true;
-	threads[message.threadID] = thread;
-      } else {
-      	console.log('Ignoring message from known sender: ', message);
+  api.getThreadList(0,argv.num_threads, 'inbox', function callback(err,arr) {
+    for(i = 0; i < argv.num_threads; i++) {
+      thread = arr[i];
+      if(!thread.isArchived && thread.unreadCount != 0 && 
+        thread.snippet != argv.response) {
+        // send an auto response to this thread
+        api.sendMessage(argv.response, thread.threadID);
+        console.log('Sending autoresponse to ', thread.snippet);
       }
     }
   });
